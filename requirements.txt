@@ -5,3 +5,4 @@ yfinance>=0.2.40
 ccxt>=4.3
 pytest>=7.4
 streamlit>=1.35
+ruptures>=1.1

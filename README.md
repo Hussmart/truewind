@@ -41,6 +41,33 @@ python examples/regime_baseline_comparison.py --save
 
 On the same year of BTC-USD data, the naive baseline flags **30 windows across 3 separate episodes** (Nov 2025, Feb 2026, June 2026) -- it fires on every sufficiently negative stretch. The consensus method flags only **15 windows, all within the Feb episode**: that period's 15-day realized volatility (~0.055) was **2.5x** the year's typical window volatility (~0.022), while the Nov and June declines, despite being comparable in cumulative size, had ordinary volatility (~0.022-0.025) -- a slower grind rather than a violent break. The consensus method is deliberately conservative: it isolates the one episode with a jointly anomalous (return, volatility) signature rather than flagging every down move.
 
+### Validation across 8 assets (not just BTC)
+
+One asset is an anecdote. This runs the same comparison, plus an independent cross-check, across a deliberately mixed basket -- two crypto assets, three individual stocks, a broad-market ETF, a gold ETF, and a bitcoin-proxy stock:
+
+```bash
+python examples/multi_asset_validation.py --save
+```
+
+![Regime detection across 8 assets](assets/multi_asset_validation.png)
+
+| ticker | windows | consensus flagged | naive flagged | flagged-episode volatility ratio | independently confirmed |
+|---|---|---|---|---|---|
+| BTC-USD | 351 | 15 | 30 | 2.70x | ✅ |
+| ETH-USD | 351 | 12 | 23 | 2.08x | ✅ |
+| AAPL | 236 | 0 | 14 | — | — |
+| TSLA | 236 | 7 | 13 | 1.48x | ❌ |
+| NVDA | 236 | 4 | 14 | 0.67x | ✅ |
+| SPY | 236 | 5 | 16 | 1.40x | ❌ |
+| GLD | 236 | 13 | 13 | 2.46x | ✅ |
+| MSTR | 236 | 19 | 20 | 2.02x | ✅ |
+
+Two findings, stated plainly:
+
+- **The naive-vs-consensus pattern generalizes**: consensus flagged fewer-or-equal windows than the naive baseline on **8/8** assets, not just BTC.
+- **Independent cross-check**: for each asset's flagged episode, [`ruptures`](https://github.com/deepcharles/ruptures) (a widely-used, independently-developed changepoint-detection library -- PELT algorithm, not something this project wrote) was run separately and checked for a detected structural break near the same dates. It agreed on **5 of 7** assets with a flagged episode (AAPL had none to confirm). TSLA and SPY were *not* independently confirmed -- stated here rather than only showing the assets that agree.
+- **Not every "anomaly" is a crash**: NVDA's flagged episode (Apr 20-27, 2026) had a volatility ratio *below* 1 -- it was an unusually smooth, strongly positive stretch (+1.2%/day average) for a stock that's normally choppy, not a selloff. The method flags whatever is jointly statistically distinct from the year's normal regime, in either direction.
+
 ## 2. Cross-exchange price-consensus
 
 At each timestamp, each exchange's quoted price is a node; nodes agree if their prices are close relative to the group. The solver finds the consensus "true price" cluster — any exchange left out is flagged (stale book, thin liquidity, or a wash-trading / manipulation candidate).
@@ -76,9 +103,19 @@ pip install -e ".[dashboard]"
 streamlit run dashboard/app.py
 ```
 
-## Why not just use z-scores / Isolation Forest?
+## Why not just use z-scores / changepoint detection?
 
-You can, and for many cases you should — this isn't a replacement for standard anomaly detection. The difference is what "normal" means: classic outlier detectors compare each point to a *global* statistic (mean, a fitted density). The consensus approach instead asks "what is the largest *mutually agreeing* subset of the data" — which is naturally robust when a large minority of points are simultaneously wrong (e.g. a correlated shock across several windows, or several exchanges briefly agreeing on a stale price), a case where distance-to-global-mean methods degrade.
+You can, and for many cases you should — this isn't a replacement for standard methods, and the validation above uses both a z-score baseline and `ruptures` (PELT) as reference points rather than pretending they don't exist. The difference is what "normal" means: classic outlier detectors compare each point to a *global* statistic (mean, a fitted density) or look for *any* statistical shift. The consensus approach instead asks "what is the largest *mutually agreeing* subset of the data" — which is naturally robust when a large minority of points are simultaneously wrong (e.g. a correlated shock across several windows, or several exchanges briefly agreeing on a stale price), and tends to be more conservative/selective than either baseline, per the validation above.
+
+## Scope & limitations
+
+Stated plainly, so nobody has to guess:
+
+- **This is a proof-of-concept / personal project, not production-grade quant research.** No trading backtest, no PnL, no Sharpe ratio, no claim that acting on these flags would make or save money.
+- **The multi-asset validation is retrospective, not causal/online.** The consensus method uses the *entire* period at once to find the consensus regime, which is valid for after-the-fact anomaly detection but is look-ahead-biased if you tried to use it as a live trading signal without modification (e.g. a rolling/expanding-window refit).
+- **Ruptures independently confirmed the flagged episode on 5/7 assets, not 8/8.** That's reported above rather than only showing the agreeing cases.
+- **The one real cross-exchange finding (module 2) is a single data point** (one day, one asset pair) with an unresolved mechanism -- see the caveat in that section. It demonstrates the detector works on real, unmodified data; it is not a manipulation-detection track record.
+- **This wasn't tested against labeled ground-truth financial anomaly datasets** (the synthetic tests use injected, known ground truth; the real-data validation uses an independent method as a *sanity check*, not a labeled benchmark).
 
 ## Install
 
@@ -100,7 +137,7 @@ truewind/
   viz.py                   # matplotlib helpers
   data/                    # live (yfinance/ccxt) + synthetic data generators
 dashboard/app.py            # Streamlit dashboard over all three modules
-examples/                   # runnable demo scripts
+examples/                   # runnable demo scripts, including multi_asset_validation.py
 tests/                       # pytest suite (synthetic ground-truth checks)
 ```
 
@@ -116,7 +153,8 @@ Tests validate the solver against synthetic graphs/series with a known, injected
 
 - [ ] Robust correlation clustering for pairs-trading candidate selection
 - [ ] Plug a real news feed + sentiment model (e.g. FinBERT) into the news ↔ price alignment module instead of synthetic labels
-- [ ] Benchmark against Isolation Forest too (z-score baseline is done, see `examples/regime_baseline_comparison.py`)
+- [ ] Benchmark against Isolation Forest too (z-score and ruptures/PELT baselines are done, see `examples/regime_baseline_comparison.py` and `examples/multi_asset_validation.py`)
+- [ ] A proper causal/rolling backtest (see Scope & limitations) instead of the current retrospective, whole-period fit
 - [ ] Add binance/coinbase/kraken back in for users whose network can reach them (they block many cloud/CI IP ranges)
 
 Issues and PRs welcome.

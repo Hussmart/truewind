@@ -1,5 +1,10 @@
 from truewind.data.price_data import generate_synthetic_price_series
-from truewind.regime import RegimeAnomalyDetector, naive_zscore_baseline
+from truewind.regime import (
+    RegimeAnomalyDetector,
+    changepoint_breakpoints,
+    episode_confirmed_by_changepoint,
+    naive_zscore_baseline,
+)
 
 
 def test_flags_at_least_one_injected_anomaly():
@@ -40,3 +45,20 @@ def test_naive_baseline_disagrees_with_consensus():
     assert consensus.anomaly_mask.sum() > 0
     assert baseline.anomaly_mask.sum() > 0
     assert not (consensus.anomaly_mask == baseline.anomaly_mask).all()
+
+
+def test_changepoint_detection_confirms_injected_shock():
+    prices = generate_synthetic_price_series(n_points=400, n_anomalies=1, anomaly_magnitude=0.15, seed=9)
+    consensus = RegimeAnomalyDetector(window_size=10, step=1).fit(prices)
+    bkps = changepoint_breakpoints(prices, penalty=1.0)
+
+    assert len(bkps) > 0
+    assert episode_confirmed_by_changepoint(consensus.anomaly_timestamps, bkps, tolerance_days=15)
+
+
+def test_episode_confirmed_false_when_no_breakpoints_nearby():
+    import pandas as pd
+
+    anomaly_ts = pd.DatetimeIndex(["2026-01-01", "2026-01-02"])
+    far_bkps = pd.DatetimeIndex(["2020-01-01"])
+    assert not episode_confirmed_by_changepoint(anomaly_ts, far_bkps, tolerance_days=10)

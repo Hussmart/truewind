@@ -127,3 +127,36 @@ def naive_zscore_baseline(prices: pd.Series, window_size: int = 15, step: int = 
         u=np.where(anomaly_mask, 0.0, 1.0),
         anomaly_mask=anomaly_mask,
     )
+
+
+def changepoint_breakpoints(prices: pd.Series, penalty: float = 1.0) -> pd.DatetimeIndex:
+    """Detect structural breaks in returns using PELT (via the `ruptures`
+    library) as an independent, established cross-check -- not something
+    this project invented. Returns the dates ruptures considers to be the
+    start of a new statistical regime (mean/variance shift).
+    """
+    import ruptures as rpt
+
+    prices = prices.dropna()
+    returns = prices.pct_change().dropna()
+    signal = returns.to_numpy().reshape(-1, 1)
+
+    algo = rpt.Pelt(model="rbf", min_size=5).fit(signal)
+    bkps = algo.predict(pen=penalty)
+    bkps = [b for b in bkps if b < len(returns)]  # drop the trailing "end of series" marker
+    return returns.index[[b - 1 for b in bkps]]
+
+
+def episode_confirmed_by_changepoint(
+    anomaly_timestamps: pd.DatetimeIndex,
+    breakpoints: pd.DatetimeIndex,
+    tolerance_days: int = 10,
+) -> bool:
+    """Whether any independent ruptures breakpoint falls within
+    ``tolerance_days`` of the flagged episode -- a sanity check that the
+    consensus method's flag isn't spurious."""
+    if len(anomaly_timestamps) == 0 or len(breakpoints) == 0:
+        return False
+    lo, hi = anomaly_timestamps.min(), anomaly_timestamps.max()
+    window = pd.Timedelta(days=tolerance_days)
+    return bool(((breakpoints >= lo - window) & (breakpoints <= hi + window)).any())

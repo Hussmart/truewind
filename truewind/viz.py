@@ -159,6 +159,35 @@ def plot_exchange_consensus(
     return fig
 
 
+def plot_multi_asset_summary(df: pd.DataFrame, title: str = "Regime Detection Across Assets", save_path: str | None = None):
+    """Grouped bar chart: consensus vs naive flagged-window counts per asset,
+    with a marker for whether ruptures/PELT independently confirmed the
+    flagged episode."""
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+    tickers = df.index.tolist()
+    x = range(len(tickers))
+    width = 0.35
+
+    ax.bar([i - width / 2 for i in x], df["naive_flagged"], width, color="#ed8936", alpha=0.85, label="Naive z-score")
+    ax.bar([i + width / 2 for i in x], df["consensus_flagged"], width, color="#e53e3e", alpha=0.9, label="Consensus")
+
+    for i, ticker in enumerate(tickers):
+        if df.loc[ticker, "ruptures_confirms_episode"]:
+            y = max(df.loc[ticker, "naive_flagged"], df.loc[ticker, "consensus_flagged"]) + 1
+            ax.annotate("✓ ruptures", (i, y), ha="center", fontsize=7.5, color="#2f855a")
+
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(tickers)
+    ax.set_ylabel("Windows flagged")
+    ax.set_title(title)
+    ax.legend()
+    fig.tight_layout()
+
+    if save_path:
+        fig.savefig(save_path, dpi=140)
+    return fig
+
+
 def plot_news_price_alignment(prices: pd.Series, result: NewsPriceAlignmentResult, title: str = "News ↔ Price-Move Alignment", save_path: str | None = None):
     fig, ax = plt.subplots(figsize=(11, 5))
     ax.plot(prices.index, prices.values, color="#2b6cb0", linewidth=1.2, label="Price", zorder=1)
