@@ -2,8 +2,10 @@
 
 By default uses a synthetic multi-exchange price panel with one exchange
 biased for a window of time, so the demo runs offline and reproducibly.
-Pass --live to fetch real snapshots via ccxt instead (requires network
-access and only captures a single timestamp per run).
+
+Pass --history to fetch real historical daily closes from several real
+exchanges via ccxt (the recommended way to see this on real data), or
+--live for a single real-time snapshot instead.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ import argparse
 from pathlib import Path
 
 from truewind.data.exchange_data import (
+    fetch_multi_exchange_ohlcv_history,
     fetch_multi_exchange_snapshot,
     generate_synthetic_exchange_snapshots,
 )
@@ -23,12 +26,17 @@ OUTPUT_DIR = Path(__file__).parent / "output"
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--history", action="store_true", help="fetch real historical daily closes via ccxt")
     parser.add_argument("--live", action="store_true", help="fetch a single live snapshot via ccxt")
     parser.add_argument("--symbol", type=str, default="BTC/USDT")
+    parser.add_argument("--days", type=int, default=180, help="days of history for --history")
     parser.add_argument("--save", action="store_true", help="save chart to examples/output/")
     args = parser.parse_args()
 
-    if args.live:
+    if args.history:
+        snapshots = fetch_multi_exchange_ohlcv_history(args.symbol, limit=args.days)
+        print(f"Fetched {len(snapshots)} days of real history from: {list(snapshots.columns)}")
+    elif args.live:
         snapshot = fetch_multi_exchange_snapshot(args.symbol)
         print("Live snapshot:")
         print(snapshot)
@@ -50,7 +58,10 @@ def main() -> None:
         OUTPUT_DIR.mkdir(exist_ok=True)
         save_path = str(OUTPUT_DIR / "exchange_consensus.png")
 
-    plot_exchange_consensus(snapshots, result, save_path=save_path)
+    title = "Cross-Exchange Price Consensus"
+    if args.history:
+        title += f" — {args.symbol}, real daily closes"
+    plot_exchange_consensus(snapshots, result, title=title, save_path=save_path)
     if save_path:
         print(f"Chart saved to {save_path}")
     else:

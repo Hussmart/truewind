@@ -27,10 +27,12 @@ def main() -> None:
 
     if args.ticker:
         prices = fetch_price_history(args.ticker, period=args.period)
+        title = f"Regime-Break Detection — {args.ticker}, real data via yfinance"
     else:
         prices = generate_synthetic_price_series()
         injected = prices.attrs.get("injected_anomaly_positions", [])
         print(f"Using synthetic series. Injected shock indices: {injected}")
+        title = "Regime-Break Detection — synthetic data"
 
     detector = RegimeAnomalyDetector(window_size=args.window_size)
     result = detector.fit(prices)
@@ -45,7 +47,7 @@ def main() -> None:
         OUTPUT_DIR.mkdir(exist_ok=True)
         save_path = str(OUTPUT_DIR / "regime_anomalies.png")
 
-    plot_regime_anomalies(prices, result, save_path=save_path)
+    plot_regime_anomalies(prices, result, title=title, save_path=save_path)
     if save_path:
         print(f"Chart saved to {save_path}")
     else:

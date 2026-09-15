@@ -23,24 +23,27 @@ This is a from-scratch, from-first-principles reimplementation of CLIPPER's core
 Rolling windows of returns are turned into nodes of a consistency graph (nodes agree if their local mean/volatility are statistically close). The solver finds the largest mutually-consistent set of windows — the "normal regime" — and flags everything left out.
 
 ```bash
-python examples/regime_demo.py --save          # synthetic data, offline
-python examples/regime_demo.py --ticker AAPL   # real data via yfinance
+python examples/regime_demo.py --save                              # synthetic data, offline
+python examples/regime_demo.py --ticker BTC-USD --period 1y --save  # real data via yfinance
 ```
 
 ![Regime-break detection](assets/regime_anomalies.png)
+
+**This chart is real data**, not synthetic: one year of daily BTC-USD closes pulled live via `yfinance`. The detector flags a 15-day cluster of windows around the Feb 2026 sell-off (price falling from ~$90k to ~$63k) as a regime break, with no other false positives across the rest of the year.
 
 ## 2. Cross-exchange price-consensus
 
 At each timestamp, each exchange's quoted price is a node; nodes agree if their prices are close relative to the group. The solver finds the consensus "true price" cluster — any exchange left out is flagged (stale book, thin liquidity, or a wash-trading / manipulation candidate).
 
 ```bash
-python examples/exchange_demo.py --save                    # synthetic panel, offline
-python examples/exchange_demo.py --live --symbol BTC/USDT  # live snapshot via ccxt
+python examples/exchange_demo.py --save                     # synthetic panel, offline
+python examples/exchange_demo.py --history --days 400 --save  # real historical daily closes via ccxt (recommended)
+python examples/exchange_demo.py --live --symbol BTC/USDT   # single real-time snapshot via ccxt
 ```
 
 ![Cross-exchange consensus](assets/exchange_consensus.png)
 
-In the synthetic demo above, one exchange (`kucoin`) is biased +3% for a window of time — the detector flags exactly that exchange, with zero false positives on the others.
+**This chart is also real data**: 400 days of real daily BTC/USDT closes from 4-5 major exchanges via `ccxt` (bybit, kucoin, mexc, bitget, poloniex — chosen because they don't block cloud/CI IP ranges; pass your own `exchanges=[...]` for others). Across ~400 daily observations the exchanges track within basis points of each other -- except **June 3, 2026**, in the middle of a sharp BTC sell-off, when **Poloniex quoted +1.05% above the 4-exchange consensus** for a single day. That's exactly the kind of stale-book/thin-liquidity divergence this detector is built to catch, and it's a real, unmodified data point, not an injected one. (The synthetic mode above still exists for tests/CI, where a fixed, reproducible ground truth is needed.)
 
 ## 3. News ↔ price-move alignment
 
@@ -56,7 +59,7 @@ In the synthetic demo above, 4 news events are genuinely causal and 10 are unrel
 
 ## Dashboard
 
-An interactive Streamlit dashboard covers all three modules:
+An interactive Streamlit dashboard covers all three modules, defaulting to real data (yfinance / ccxt) with a toggle back to synthetic:
 
 ```bash
 pip install -e ".[dashboard]"
@@ -102,9 +105,9 @@ Tests validate the solver against synthetic graphs/series with a known, injected
 ## Roadmap / ideas for contribution
 
 - [ ] Robust correlation clustering for pairs-trading candidate selection
-- [ ] Plug a real sentiment model (e.g. FinBERT) into the news ↔ price alignment module instead of a signed label
+- [ ] Plug a real news feed + sentiment model (e.g. FinBERT) into the news ↔ price alignment module instead of synthetic labels
 - [ ] Benchmark against Isolation Forest / z-score baselines on labeled anomaly datasets
-- [ ] Historical (not just live-snapshot) cross-exchange backtesting via exchange APIs' OHLCV history
+- [ ] Add binance/coinbase/kraken back in for users whose network can reach them (they block many cloud/CI IP ranges)
 
 Issues and PRs welcome.
 

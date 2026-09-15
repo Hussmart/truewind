@@ -7,7 +7,15 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
-DEFAULT_EXCHANGES = ["binance", "kraken", "coinbase", "kucoin", "bitstamp"]
+DEFAULT_EXCHANGES = ["bybit", "kucoin", "mexc", "bitget", "poloniex"]
+"""A cloud/CI-friendly default set: several well-known exchanges (binance,
+coinbase, kraken, bitstamp among them) block requests from datacenter/cloud
+IP ranges, which makes them unreliable defaults for a public demo. Pass your
+own ``exchanges=[...]`` list if you want those instead and your network can
+reach them. (htx/Huobi is deliberately excluded: its daily-candle boundary
+doesn't line up with the UTC calendar day, which produces a spurious ~50%
+"outlier" rate that reflects a timestamp-alignment artifact, not a real
+price disagreement.)"""
 
 
 def fetch_multi_exchange_snapshot(symbol: str = "BTC/USDT", exchanges: list[str] | None = None) -> pd.Series:
@@ -37,6 +45,51 @@ def fetch_multi_exchange_snapshot(symbol: str = "BTC/USDT", exchanges: list[str]
             f"Could not fetch '{symbol}' from at least 2 exchanges (got {list(prices)})."
         )
     return pd.Series(prices, name=symbol)
+
+
+def fetch_multi_exchange_ohlcv_history(
+    symbol: str = "BTC/USDT",
+    exchanges: list[str] | None = None,
+    timeframe: str = "1d",
+    limit: int = 180,
+) -> pd.DataFrame:
+    """Fetch daily (or ``timeframe``) close-price history for ``symbol`` from several exchanges.
+
+    Unlike :func:`fetch_multi_exchange_snapshot` (a single point-in-time
+    check), this pulls real historical OHLCV candles per exchange via ccxt
+    and aligns them into one DataFrame (index=timestamp, one column per
+    exchange) -- giving :class:`~truewind.exchange_consensus.ExchangeConsensusDetector`
+    a real time series to flag disagreements across, rather than one snapshot.
+    Exchanges that fail to respond are silently skipped.
+    """
+    import ccxt
+
+    exchanges = exchanges or DEFAULT_EXCHANGES
+    frames = {}
+    for name in exchanges:
+        try:
+            exchange_cls = getattr(ccxt, name)
+            exchange = exchange_cls({"enableRateLimit": True})
+            ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+            if not ohlcv:
+                continue
+            df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+            if timeframe.endswith("d"):
+                # Different exchanges close a "daily" candle at slightly different
+                # times; normalize to the calendar day so rows actually align.
+                df["timestamp"] = df["timestamp"].dt.normalize()
+            frames[name] = df.groupby("timestamp")["close"].last()
+        except Exception:
+            continue
+
+    if len(frames) < 2:
+        raise ValueError(
+            f"Could not fetch OHLCV history for '{symbol}' from at least 2 exchanges (got {list(frames)})."
+        )
+
+    panel = pd.DataFrame(frames).sort_index()
+    return panel
 
 
 def generate_synthetic_exchange_snapshots(
