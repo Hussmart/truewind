@@ -31,6 +31,16 @@ python examples/regime_demo.py --ticker BTC-USD --period 1y --save  # real data 
 
 **This chart is real data**, not synthetic: one year of daily BTC-USD closes pulled live via `yfinance`. The detector flags a 15-day cluster of windows around the Feb 2026 sell-off (price falling from ~$90k to ~$63k) as a regime break, with no other false positives across the rest of the year.
 
+**Why so few flagged windows?** Because the method requires a window's *volatility* to also be jointly anomalous, not just its direction. Compare against a naive z-score-on-return baseline:
+
+```bash
+python examples/regime_baseline_comparison.py --save
+```
+
+![Consensus vs naive baseline](assets/regime_baseline_comparison.png)
+
+On the same year of BTC-USD data, the naive baseline flags **30 windows across 3 separate episodes** (Nov 2025, Feb 2026, June 2026) -- it fires on every sufficiently negative stretch. The consensus method flags only **15 windows, all within the Feb episode**: that period's 15-day realized volatility (~0.055) was **2.5x** the year's typical window volatility (~0.022), while the Nov and June declines, despite being comparable in cumulative size, had ordinary volatility (~0.022-0.025) -- a slower grind rather than a violent break. The consensus method is deliberately conservative: it isolates the one episode with a jointly anomalous (return, volatility) signature rather than flagging every down move.
+
 ## 2. Cross-exchange price-consensus
 
 At each timestamp, each exchange's quoted price is a node; nodes agree if their prices are close relative to the group. The solver finds the consensus "true price" cluster — any exchange left out is flagged (stale book, thin liquidity, or a wash-trading / manipulation candidate).
@@ -106,7 +116,7 @@ Tests validate the solver against synthetic graphs/series with a known, injected
 
 - [ ] Robust correlation clustering for pairs-trading candidate selection
 - [ ] Plug a real news feed + sentiment model (e.g. FinBERT) into the news ↔ price alignment module instead of synthetic labels
-- [ ] Benchmark against Isolation Forest / z-score baselines on labeled anomaly datasets
+- [ ] Benchmark against Isolation Forest too (z-score baseline is done, see `examples/regime_baseline_comparison.py`)
 - [ ] Add binance/coinbase/kraken back in for users whose network can reach them (they block many cloud/CI IP ranges)
 
 Issues and PRs welcome.

@@ -182,3 +182,46 @@ def plot_news_price_alignment(prices: pd.Series, result: NewsPriceAlignmentResul
     if save_path:
         fig.savefig(save_path, dpi=140)
     return fig
+
+
+def plot_regime_comparison(
+    prices: pd.Series,
+    consensus_result: RegimeResult,
+    baseline_result: RegimeResult,
+    title: str = "Consensus vs. Naive Z-Score Baseline",
+    save_path: str | None = None,
+):
+    """Show both detectors' flags on the same price series to make the
+    difference concrete: the naive baseline flags every sufficiently
+    negative-return window, while the consensus method only flags windows
+    whose volatility is *also* jointly anomalous."""
+    fig, ax = plt.subplots(figsize=(11, 5.5))
+    ax.plot(prices.index, prices.values, color="#2b6cb0", linewidth=1.2, label="Price", zorder=2)
+
+    base_ts = baseline_result.anomaly_timestamps
+    if len(base_ts):
+        for i, (lo, hi) in enumerate(_contiguous_spans(base_ts, gap_tolerance=pd.Timedelta(days=3))):
+            ax.axvspan(lo, hi, color="#ed8936", alpha=0.18, zorder=0, label="Naive z-score flag" if i == 0 else None)
+
+    cons_ts = consensus_result.anomaly_timestamps
+    if len(cons_ts):
+        for i, (lo, hi) in enumerate(_contiguous_spans(cons_ts, gap_tolerance=pd.Timedelta(days=3))):
+            ax.axvspan(lo, hi, color="#e53e3e", alpha=0.28, zorder=1, label="Consensus flag" if i == 0 else None)
+
+    ax.text(
+        0.01,
+        0.02,
+        f"Naive: {len(base_ts)} windows flagged  |  Consensus: {len(cons_ts)} windows flagged",
+        transform=ax.transAxes,
+        fontsize=9,
+        color="#333333",
+    )
+    ax.set_title(title)
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Price")
+    ax.legend()
+    fig.tight_layout()
+
+    if save_path:
+        fig.savefig(save_path, dpi=140)
+    return fig

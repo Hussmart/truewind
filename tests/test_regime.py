@@ -1,5 +1,5 @@
 from truewind.data.price_data import generate_synthetic_price_series
-from truewind.regime import RegimeAnomalyDetector
+from truewind.regime import RegimeAnomalyDetector, naive_zscore_baseline
 
 
 def test_flags_at_least_one_injected_anomaly():
@@ -26,3 +26,17 @@ def test_raises_on_too_short_series():
         assert False, "expected ValueError"
     except ValueError:
         pass
+
+
+def test_naive_baseline_disagrees_with_consensus():
+    # The two methods score different things (direction-only vs. joint
+    # mean+volatility), so neither should consistently flag a superset of
+    # the other -- just check both produce sensible, non-identical results.
+    prices = generate_synthetic_price_series(n_points=400, n_anomalies=3, anomaly_magnitude=0.1, seed=3)
+
+    consensus = RegimeAnomalyDetector(window_size=10, step=1).fit(prices)
+    baseline = naive_zscore_baseline(prices, window_size=10, step=1)
+
+    assert consensus.anomaly_mask.sum() > 0
+    assert baseline.anomaly_mask.sum() > 0
+    assert not (consensus.anomaly_mask == baseline.anomaly_mask).all()

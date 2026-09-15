@@ -90,3 +90,40 @@ class RegimeAnomalyDetector:
             u=result.u,
             anomaly_mask=anomaly_mask,
         )
+
+
+def naive_zscore_baseline(prices: pd.Series, window_size: int = 15, step: int = 1, z_threshold: float = 1.5) -> RegimeResult:
+    """A standard "z-score on rolling return" anomaly flagger, for comparison.
+
+    Flags a window whenever its mean return is more than ``z_threshold``
+    standard deviations below the average window mean across the series --
+    the common baseline approach. Unlike :class:`RegimeAnomalyDetector`, it
+    only looks at the *direction* of the window (mean return), not whether
+    its volatility is *also* jointly unusual -- so it tends to flag every
+    sufficiently negative stretch, not just the ones with an anomalous
+    volatility signature.
+    """
+    prices = prices.dropna()
+    returns = prices.pct_change().dropna()
+    values = returns.to_numpy()
+    index = returns.index
+
+    n = len(values)
+    starts = list(range(0, n - window_size + 1, step))
+    if len(starts) < 3:
+        raise ValueError("Series too short for the given window_size/step")
+
+    means = np.array([values[s : s + window_size].mean() for s in starts])
+    stds = np.array([values[s : s + window_size].std() for s in starts])
+    window_index = index[[min(s + window_size - 1, n - 1) for s in starts]]
+
+    z = (means - means.mean()) / (means.std() + 1e-9)
+    anomaly_mask = z < -z_threshold
+
+    return RegimeResult(
+        window_index=window_index,
+        window_means=means,
+        window_stds=stds,
+        u=np.where(anomaly_mask, 0.0, 1.0),
+        anomaly_mask=anomaly_mask,
+    )
