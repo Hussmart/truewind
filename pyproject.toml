@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "truewind"
+version = "0.1.0"
+description = "Robust financial anomaly and cross-exchange price-consensus detection, via a consensus-maximization graph algorithm inspired by MIT-ACL's CLIPPER."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+    "yfinance>=0.2.40",
+    "ccxt>=4.3",
+]
+
+[project.optional-dependencies]
+dashboard = ["streamlit>=1.35"]
+
+[tool.setuptools.packages.find]
+include = ["truewind*"]
