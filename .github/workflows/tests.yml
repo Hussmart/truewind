@@ -20,3 +20,18 @@ jobs:
       - run: pip install -r requirements.txt
       - run: pip install -e .
       - run: pytest -v
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t truewind .
+      - name: Start the dashboard and wait for its health check
+        run: |
+          docker run -d --name truewind -p 8501:8501 truewind
+          for i in $(seq 1 30); do
+            if curl -fs http://localhost:8501/_stcore/health; then exit 0; fi
+            sleep 2
+          done
+          docker logs truewind
+          exit 1
