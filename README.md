@@ -103,6 +103,15 @@ pip install -e ".[dashboard]"
 streamlit run dashboard/app.py
 ```
 
+Or run it in Docker, with no local Python setup:
+
+```bash
+docker build -t truewind .
+docker run --rm -p 8501:8501 truewind
+```
+
+Then open http://localhost:8501. The image holds only the package and the dashboard (tests, examples and assets are left out by `.dockerignore`), runs as a non-root user, and reports its state through Streamlit's health endpoint. CI builds the image and waits for that health check on every push.
+
 ## Why not just use z-scores / changepoint detection?
 
 You can, and for many cases you should — this isn't a replacement for standard methods, and the validation above uses both a z-score baseline and `ruptures` (PELT) as reference points rather than pretending they don't exist. The difference is what "normal" means: classic outlier detectors compare each point to a *global* statistic (mean, a fitted density) or look for *any* statistical shift. The consensus approach instead asks "what is the largest *mutually agreeing* subset of the data" — which is naturally robust when a large minority of points are simultaneously wrong (e.g. a correlated shock across several windows, or several exchanges briefly agreeing on a stale price), and tends to be more conservative/selective than either baseline, per the validation above.
@@ -137,6 +146,7 @@ truewind/
   viz.py                   # matplotlib helpers
   data/                    # live (yfinance/ccxt) + synthetic data generators
 dashboard/app.py            # Streamlit dashboard over all three modules
+Dockerfile                  # container image for the dashboard
 examples/                   # runnable demo scripts, including multi_asset_validation.py
 tests/                       # pytest suite (synthetic ground-truth checks)
 ```
